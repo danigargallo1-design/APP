@@ -1,17 +1,14 @@
-let activeLessonSession = null;
+// ===== Variables de estado de la sesión =====
 let currentLessonCorrect = 0;
-let repaso = JSON.parse(localStorage.getItem('repaso')) || {};
-
-
+let currentLessonErrors = []; // NUEVO: Para guardar las preguntas falladas
 const mainContainer = document.getElementById('main-container');
 
 const skills = [
     { name: "Negociar" },
     { name: "Improvisar" },
-    { name: "Desarrollo personal"},
-    { name: "Comunicación efectiva"}
+    { name: "Desarrollo personal" },
+    { name: "Comunicación efectiva" }
 ];
-
 
 
 const skillData = {
@@ -1121,18 +1118,23 @@ const skillData = {
 }
 };
 
-// Cargar progreso desde localStorage
+// ===== Cargar progreso desde localStorage =====
 let progreso = {};
 const savedProgress = localStorage.getItem('progreso');
-if (savedProgress) {
-    progreso = JSON.parse(savedProgress);
+if (savedProgress) progreso = JSON.parse(savedProgress);
+
+// ===== Función genérica: Crear botón de volver =====
+function createBackButton(onClick) {
+    const btn = document.createElement('button');
+    btn.textContent = "← Volver";
+    btn.classList.add('back-button');
+    btn.onclick = onClick;
+    return btn;
 }
 
-
-// Mostrar la pantalla principal
+// ===== Mostrar pantalla principal =====
 function showHome() {
     activeLessonSession = null;
-
     mainContainer.innerHTML = "<h2>Habilidades</h2>";
     skills.forEach(skill => {
         const btn = document.createElement('button');
@@ -1142,21 +1144,12 @@ function showHome() {
     });
 }
 
-// Mostrar habilidad con lecciones
+// ===== Mostrar habilidad y sus lecciones =====
 function showSkill(skill) {
-    if (!skillData[skill]) {
-        alert("Habilidad no encontrada");
-        showHome();
-        return;
-    }
+    if (!skillData[skill]) return showHome();
 
     mainContainer.innerHTML = "";
-
-    const backBtn = document.createElement('button');
-    backBtn.textContent = "← Volver";
-    backBtn.classList.add('back-button');
-    backBtn.onclick = showHome;
-    mainContainer.appendChild(backBtn);
+    mainContainer.appendChild(createBackButton(showHome));
 
     const title = document.createElement('h2');
     title.textContent = skill;
@@ -1169,40 +1162,30 @@ function showSkill(skill) {
         const lessonBtn = document.createElement('button');
         lessonBtn.style.flex = '1';
 
-        const totalQuestions = lesson.questions ? lesson.questions.length : 0;
-const savedProgress = (progreso[skill]?.[lesson.title]) || 0;
+        const totalQuestions = lesson.questions?.length || 0;
+        const savedProgress = progreso[skill]?.[lesson.title] || 0;
 
-// Texto base
-lessonBtn.textContent = lesson.title;
+        // Texto base y estados visuales
+        lessonBtn.textContent = lesson.title;
+        lessonBtn.classList.remove('completed', 'in-progress');
 
-// ---- ESTADOS VISUALES ----
-lessonBtn.classList.remove('completed', 'in-progress');
-
-if (totalQuestions > 0) {
-    if (savedProgress >= totalQuestions) {
-        lessonBtn.classList.add('completed');
-        lessonBtn.textContent += " ✓";
-    } else if (savedProgress > 0) {
-        lessonBtn.classList.add('in-progress');
-        lessonBtn.textContent += ` (${savedProgress}/${totalQuestions})`;
-    } else {
-        lessonBtn.textContent += ` (0/${totalQuestions})`;
-    }
-}
+        if (totalQuestions > 0) {
+            if (savedProgress >= totalQuestions) {
+                lessonBtn.classList.add('completed');
+                lessonBtn.textContent += " ✓";
+            } else if (savedProgress > 0) {
+                lessonBtn.classList.add('in-progress');
+                lessonBtn.textContent += ` (${savedProgress}/${totalQuestions})`;
+            } else {
+                lessonBtn.textContent += ` (0/${totalQuestions})`;
+            }
+        }
 
         lessonBtn.onclick = () => {
-            if (lesson.questions && lesson.questions.length > 0) {
-                let startIndex = savedProgress;
-
-                // Si la lección estaba completada, reiniciamos desde cero
-                if (savedProgress >= totalQuestions) {
-                    startIndex = 0;
-                }
-
-                showQuestion(skill, lesson, startIndex);
-            } else {
-                showLesson(skill, lesson);
-            }
+            let startIndex = savedProgress;
+            if (savedProgress >= totalQuestions) startIndex = 0;
+            if (totalQuestions > 0) showQuestion(skill, lesson, startIndex);
+            else showLesson(skill, lesson);
         };
 
         lessonRow.appendChild(lessonBtn);
@@ -1217,20 +1200,13 @@ if (totalQuestions > 0) {
     });
 }
 
-
-// Lección normal
+// ===== Mostrar lección normal =====
 function showLesson(skill, lesson) {
     mainContainer.innerHTML = "";
-
-    const backBtn = document.createElement('button');
-    backBtn.textContent = "← Volver";
-    backBtn.classList.add('back-button');
-    backBtn.onclick = () => {
-    cleanupQuestion();
-    showSkill(skill);
-};
-
-    mainContainer.appendChild(backBtn);
+    mainContainer.appendChild(createBackButton(() => {
+        cleanupQuestion();
+        showSkill(skill);
+    }));
 
     const title = document.createElement('h2');
     title.textContent = lesson.title || "Lección";
@@ -1241,15 +1217,10 @@ function showLesson(skill, lesson) {
     mainContainer.appendChild(div);
 }
 
-// Lección modo estudio
+// ===== Mostrar lección en modo estudio =====
 function showLessonStudy(skill, lesson) {
     mainContainer.innerHTML = "";
-
-    const backBtn = document.createElement('button');
-    backBtn.textContent = "← Volver";
-    backBtn.classList.add('back-button');
-    backBtn.onclick = () => showSkill(skill);
-    mainContainer.appendChild(backBtn);
+    mainContainer.appendChild(createBackButton(() => showSkill(skill)));
 
     const title = document.createElement('h2');
     title.textContent = lesson.title || "Lección";
@@ -1260,7 +1231,7 @@ function showLessonStudy(skill, lesson) {
     div.style.marginTop = '1rem';
     div.style.lineHeight = '1.5rem';
 
-    if (lesson.questions && lesson.questions.length > 0) {
+    if (lesson.questions?.length > 0) {
         let studyHTML = `<p><strong>${lesson.title}</strong> es un apartado fundamental. Repasa estos conceptos:</p>`;
         lesson.questions.forEach((q, i) => {
             let concept = q.question.split('?')[0];
@@ -1275,37 +1246,162 @@ function showLessonStudy(skill, lesson) {
     mainContainer.appendChild(div);
 }
 
-// Mostrar pregunta interactiva con feedback visual y transición suave
-function showQuestion(skill, lesson, questionIndex) {
-    if (questionIndex === 0) currentLessonCorrect = 0;
+// ===== Preguntas interactivas =====
+function showQuestion(skill, lesson, questionIndex, isReview = false) {
+    // Si empezamos de cero y NO es un repaso, reseteamos contadores
+    if (questionIndex === 0 && !isReview) {
+        currentLessonCorrect = 0;
+        currentLessonErrors = []; 
+    }
+    
     const sessionId = Date.now();
     activeLessonSession = sessionId;
 
     const questionData = lesson.questions[questionIndex];
     mainContainer.innerHTML = "";
+    
+    // Botón volver modificado para manejar el retorno desde un repaso
+    mainContainer.appendChild(createBackButton(() => {
+        cleanupQuestion();
+        showSkill(skill);
+    }));
 
-    // ===== Botón de volver =====
-    const backBtn = document.createElement('button');
-    backBtn.textContent = "← Volver";
-    backBtn.classList.add('back-button');
-    mainContainer.appendChild(backBtn);
-
-    // ===== Título de la pregunta =====
     const qTitle = document.createElement('h2');
     qTitle.textContent = questionData.question;
     mainContainer.appendChild(qTitle);
 
-    // ===== Contenedor de opciones =====
     const optionsContainer = document.createElement('div');
     mainContainer.appendChild(optionsContainer);
 
-    // ===== Explicación =====
     const explanationDiv = document.createElement('div');
     explanationDiv.style.marginTop = '1rem';
     explanationDiv.style.fontStyle = 'italic';
     mainContainer.appendChild(explanationDiv);
 
-    // ===== Barra de progreso =====
+    const { progressContainer, progressBar, startProgress, completeProgress } = createProgressBar(sessionId, () => goNext());
+    mainContainer.appendChild(progressContainer);
+
+    let questionCompleted = false;
+
+    function cleanupQuestion() {
+        questionCompleted = true;
+        activeLessonSession = null;
+        if (startProgress.stop) startProgress.stop();
+        removeClickListener();
+    }
+
+    function goNext() {
+        if (questionCompleted || activeLessonSession !== sessionId) return;
+        cleanupQuestion();
+        if (questionIndex + 1 < lesson.questions.length) {
+            showQuestion(skill, lesson, questionIndex + 1, isReview);
+        } else {
+            // Si era un repaso, al terminar volvemos a la pantalla de fin de lección original
+            // o a la habilidad. Aquí lo mandamos al fin de lección.
+            showLessonEnd(skill, lesson, isReview);
+        }
+    }
+
+    questionData.options.forEach((opt, i) => {
+        const btn = document.createElement('button');
+        btn.textContent = opt;
+        btn.classList.add('option-btn');
+        optionsContainer.appendChild(btn);
+
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+
+            // MODIFICADO: Solo guardamos progreso real si NO es un repaso de fallos
+            if (!isReview) {
+                if (!progreso[skill]) progreso[skill] = {};
+                progreso[skill][lesson.title] = questionIndex + 1;
+                localStorage.setItem('progreso', JSON.stringify(progreso));
+            }
+
+            if (i === questionData.correct) {
+    btn.classList.add('correct');
+    currentLessonCorrect++;
+} else {
+    btn.classList.add('wrong');
+    // ↓ AÑADE ESTA LÍNEA AQUÍ PARA GUARDAR EL ERROR ↓
+    if (!currentLessonErrors.includes(questionData)) currentLessonErrors.push(questionData);
+    
+    btn.style.animation = 'shake 0.5s';
+    document.querySelectorAll('.option-btn')[questionData.correct].classList.add('correct');
+
+                
+                // MODIFICADO: Guardamos la pregunta entera en la lista de fallos
+                // Solo si no la hemos añadido ya en esta sesión
+                if (!currentLessonErrors.includes(questionData)) {
+                    currentLessonErrors.push(questionData);
+                }
+
+                document.querySelectorAll('.option-btn')[questionData.correct].classList.add('correct');
+            }
+
+            explanationDiv.textContent = questionData.explanation;
+            startProgress();
+        };
+    });
+
+    function clickHandler() { completeProgress(); }
+    document.addEventListener('click', clickHandler);
+    function removeClickListener() { document.removeEventListener('click', clickHandler); }
+}
+
+// ===== Fin de lección =====
+function showLessonEnd(skill, lesson, wasReview = false) {
+    mainContainer.innerHTML = "";
+
+    const title = document.createElement('h2');
+    title.textContent = wasReview ? "Repaso Finalizado" : "Lección completada";
+    mainContainer.appendChild(title);
+
+    const total = lesson.questions.length;
+    const summary = document.createElement('p');
+    
+    if (wasReview) {
+        summary.innerHTML = `Has repasado <strong>${total}</strong> fallos.`;
+    } else {
+        summary.innerHTML = `<strong>${lesson.title}</strong><br>Aciertos: ${currentLessonCorrect} / ${total}`;
+    }
+    mainContainer.appendChild(summary);
+
+    const repeatBtn = document.createElement('button');
+    repeatBtn.textContent = "Repetir lección";
+    repeatBtn.onclick = () => showQuestion(skill, lesson, 0);
+    mainContainer.appendChild(repeatBtn);
+
+    // MODIFICADO: Lógica del botón de repasar fallos
+    const reviewErrorsBtn = document.createElement('button');
+    reviewErrorsBtn.textContent = `Repasar fallos (${currentLessonErrors.length})`;
+    
+    if (currentLessonErrors.length > 0) {
+        reviewErrorsBtn.onclick = () => {
+            // Creamos una lección "ficticia" solo con los fallos
+            const reviewLesson = {
+                title: "Repaso de fallos",
+                questions: [...currentLessonErrors]
+            };
+            // Lanzamos showQuestion con el flag de review en true
+            showQuestion(skill, reviewLesson, 0, true);
+        };
+    } else {
+        reviewErrorsBtn.disabled = true;
+        reviewErrorsBtn.style.opacity = "0.5";
+        reviewErrorsBtn.textContent = "Sin fallos que repasar ✨";
+    }
+    mainContainer.appendChild(reviewErrorsBtn);
+
+    const backBtn = document.createElement('button');
+    backBtn.textContent = "Volver a las habilidades";
+    backBtn.onclick = () => showSkill(skill);
+    mainContainer.appendChild(backBtn);
+}
+
+// ===== Crear barra de progreso =====
+function createProgressBar(sessionId, onComplete) {
     const progressContainer = document.createElement('div');
     progressContainer.style.width = '100%';
     progressContainer.style.height = '12px';
@@ -1313,7 +1409,6 @@ function showQuestion(skill, lesson, questionIndex) {
     progressContainer.style.borderRadius = '6px';
     progressContainer.style.marginTop = '0.5rem';
     progressContainer.style.display = 'none';
-    mainContainer.appendChild(progressContainer);
 
     const progressBar = document.createElement('div');
     progressBar.style.width = '0%';
@@ -1324,36 +1419,7 @@ function showQuestion(skill, lesson, questionIndex) {
 
     let animating = false;
     let animationFrameId = null;
-    let questionCompleted = false; // 👈 Nueva bandera para evitar dobles avances
 
-    // ===== Función para limpiar la pregunta =====
-    function cleanupQuestion() {
-        questionCompleted = true;
-        activeLessonSession = null;
-
-        if (animationFrameId) {
-            cancelAnimationFrame(animationFrameId);
-            animationFrameId = null;
-        }
-
-        animating = false;
-        removeClickListener();
-    }
-
-    // ===== Función para pasar a la siguiente pregunta =====
-    function goNext() {
-        if (questionCompleted || activeLessonSession !== sessionId) return;
-
-        cleanupQuestion();
-
-        if (questionIndex + 1 < lesson.questions.length) {
-            showQuestion(skill, lesson, questionIndex + 1);
-        } else {
-            showLessonEnd(skill, lesson);
-        }
-    }
-
-    // ===== Animación de barra =====
     function startProgress() {
         if (animating) return;
         animating = true;
@@ -1362,142 +1428,82 @@ function showQuestion(skill, lesson, questionIndex) {
         const duration = 4000;
 
         function animate(timestamp) {
-            if (activeLessonSession !== sessionId || questionCompleted) return; // detiene si saliste
-
+            if (activeLessonSession !== sessionId) return;
             if (!start) start = timestamp;
             const progress = Math.min((timestamp - start) / duration * 100, 100);
             progressBar.style.width = progress + '%';
-
-            if (progress < 100) {
-                animationFrameId = requestAnimationFrame(animate);
-            } else {
-                animating = false;
-                goNext();
-            }
+            if (progress < 100) animationFrameId = requestAnimationFrame(animate);
+            else { animating = false; onComplete(); }
         }
-
         animationFrameId = requestAnimationFrame(animate);
     }
 
-    // ===== Completar barra al click =====
     function completeProgress() {
-        if (!animating || questionCompleted) return;
+        if (!animating) return;
         cancelAnimationFrame(animationFrameId);
         progressBar.style.width = '100%';
         animating = false;
-        goNext();
+        onComplete();
     }
 
-    // ===== Listener global para click =====
-    function clickHandler() {
-        completeProgress();
-    }
-    document.addEventListener('click', clickHandler);
-
-    function removeClickListener() {
-        document.removeEventListener('click', clickHandler);
-    }
-
-    // ===== Opciones de respuesta =====
-    questionData.options.forEach((opt, i) => {
-        const btn = document.createElement('button');
-        btn.textContent = opt;
-        btn.classList.add('option-btn');
-        optionsContainer.appendChild(btn);
-
-        btn.onclick = (e) => {
-            e.stopPropagation(); // evitar que el click global se dispare
-            document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
-
-            // Guardar progreso
-            if (!progreso[skill]) progreso[skill] = {};
-            progreso[skill][lesson.title] = questionIndex + 1;
-            localStorage.setItem('progreso', JSON.stringify(progreso));
-// Dentro del onclick de la opción:
-if (i !== questionData.correct) {
-    if (!repaso[skill]) repaso[skill] = {};
-    if (!repaso[skill][lesson.title]) repaso[skill][lesson.title] = [];
-    
-    // Guardar índice de la pregunta fallida si no está repetida
-    if (!repaso[skill][lesson.title].includes(questionIndex)) {
-        repaso[skill][lesson.title].push(questionIndex);
-        localStorage.setItem('repaso', JSON.stringify(repaso));
-    }
+    return { progressContainer, progressBar, startProgress, completeProgress, stop: () => cancelAnimationFrame(animationFrameId) };
 }
 
-            // Marcar correcto/incorrecto
-         if (i === questionData.correct) {
-    btn.classList.add('correct');
-    currentLessonCorrect++; // 👈 contar acierto
-} else {
-    btn.classList.add('wrong');
-    btn.style.animation = 'shake 0.5s';
-    btn.addEventListener('animationend', () => btn.style.animation = '');
-    document.querySelectorAll('.option-btn')[questionData.correct].classList.add('correct');
-}
-
-
-            explanationDiv.textContent = questionData.explanation;
-            startProgress();
-        };
-    });
-
-    // ===== Botón de volver =====
-    backBtn.onclick = () => {
-        cleanupQuestion();
-        showSkill(skill);
-    };
-}
-
-
-function showLessonEnd(skill, lesson) {
+// ===== Fin de lección =====
+function showLessonEnd(skill, lesson, wasReview = false) {
     mainContainer.innerHTML = "";
 
     const title = document.createElement('h2');
-    title.textContent = "Lección completada";
+    title.textContent = wasReview ? "Repaso Finalizado" : "Lección completada";
     mainContainer.appendChild(title);
 
     const total = lesson.questions.length;
-
     const summary = document.createElement('p');
-    summary.innerHTML = `
-        <strong>${lesson.title}</strong><br>
-        Aciertos: ${currentLessonCorrect} / ${total}
-    `;
+    
+    if (wasReview) {
+        summary.innerHTML = `Has repasado <strong>${total}</strong> fallos.`;
+    } else {
+        summary.innerHTML = `<strong>${lesson.title}</strong><br>Aciertos: ${currentLessonCorrect} / ${total}`;
+    }
     mainContainer.appendChild(summary);
 
+    // Botón Repetir Todo
     const repeatBtn = document.createElement('button');
     repeatBtn.textContent = "Repetir lección";
-    repeatBtn.onclick = () => showQuestion(skill, lesson, 0);
+    repeatBtn.onclick = () => {
+        currentLessonErrors = []; // Limpiamos fallos para empezar de cero
+        showQuestion(skill, lesson, 0);
+    };
+    mainContainer.appendChild(repeatBtn);
 
+    // Botón Repasar Fallos (EL QUE DABA EL ALERT)
+    const reviewErrorsBtn = document.createElement('button');
+    reviewErrorsBtn.textContent = `Repasar fallos (${currentLessonErrors.length})`;
+    
+    if (currentLessonErrors.length > 0) {
+        reviewErrorsBtn.onclick = () => {
+            // Creamos una mini-lección solo con lo que fallaste
+            const reviewLesson = {
+                title: "Repaso de fallos",
+                questions: [...currentLessonErrors]
+            };
+            showQuestion(skill, reviewLesson, 0, true); // true para modo repaso
+        };
+    } else {
+        reviewErrorsBtn.disabled = true;
+        reviewErrorsBtn.style.opacity = "0.5";
+        reviewErrorsBtn.textContent = "¡Sin fallos! ✨";
+    }
+    mainContainer.appendChild(reviewErrorsBtn);
+
+    // Botón Volver
     const backBtn = document.createElement('button');
     backBtn.textContent = "Volver a las habilidades";
     backBtn.onclick = () => showSkill(skill);
-
-    mainContainer.appendChild(repeatBtn);
     mainContainer.appendChild(backBtn);
-    if (repaso[skill]?.[lesson.title]?.length > 0) {
-    const repasarBtn = document.createElement('button');
-    repasarBtn.textContent = "Repasar errores";
-    repasarBtn.onclick = () => showRepaso(skill, lesson);
-    mainContainer.appendChild(repasarBtn);
-}
 }
 
-
-function showRepaso(skill, lesson) {
-    const errores = repaso[skill][lesson.title];
-    if (!errores || errores.length === 0) return showLessonEnd(skill, lesson);
-
-    const nextIndex = errores.shift(); // Tomamos el primer error
-    localStorage.setItem('repaso', JSON.stringify(repaso)); // actualizar
-    
-    showQuestion(skill, lesson, nextIndex);
-}
-
-
-
-// Animación de temblor
+// ===== Animación shake =====
 const style = document.createElement('style');
 style.textContent = `
 @keyframes shake {
@@ -1507,8 +1513,8 @@ style.textContent = `
     60% { transform: translateX(-5px); }
     80% { transform: translateX(5px); }
     100% { transform: translateX(0); }
-}
-`;
+}`;
 document.head.appendChild(style);
 
+// ===== Inicialización =====
 showHome();
