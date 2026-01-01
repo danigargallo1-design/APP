@@ -1137,6 +1137,25 @@ function createBackButton(onClick) {
 }
 
 /*
+// ===== RESET COMPLETO (solo para uso tuyo) =====
+localStorage.removeItem('progreso');
+localStorage.removeItem('profile');
+
+// Reiniciar variables en memoria
+progreso = {};
+currentLessonXP = 0;
+profile = {
+    name: null,
+    xp: 0,
+    level: 1
+};
+
+// Forzar que se pida perfil al recargar
+askForProfile();
+updateProfileCard();
+
+
+
 // Reiniciar todo el progreso
 progreso = {};
 localStorage.setItem('progreso', JSON.stringify(progreso));
