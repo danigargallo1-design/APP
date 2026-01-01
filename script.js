@@ -1123,7 +1123,7 @@ const skillData = {
 };
 
 ////////////////////////////////////////////////////////////////////////
-
+/*
 
 
 // ===== RESET COMPLETO (solo para uso tuyo) =====
@@ -1150,7 +1150,7 @@ progreso = {};
 localStorage.setItem('progreso', JSON.stringify(progreso));
 
 
-
+*/
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -1670,3 +1670,4 @@ document.head.appendChild(style);
 
 // ===== Inicialización =====
 showHome();
+
