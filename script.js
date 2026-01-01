@@ -1136,7 +1136,7 @@ function createBackButton(onClick) {
     return btn;
 }
 
-/*
+///////////////////////////////////////////////////////////////////////////////////////////////
 // ===== RESET COMPLETO (solo para uso tuyo) =====
 localStorage.removeItem('progreso');
 localStorage.removeItem('profile');
@@ -1159,7 +1159,7 @@ updateProfileCard();
 // Reiniciar todo el progreso
 progreso = {};
 localStorage.setItem('progreso', JSON.stringify(progreso));
-*/
+////////////////////////////////////////////////////////////////////////////////////////////////
 
 // ===== Mostrar pantalla principal =====
 function showHome() {
@@ -1661,3 +1661,4 @@ document.head.appendChild(style);
 
 // ===== Inicialización =====
 showHome();
+
