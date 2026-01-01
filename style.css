@@ -188,3 +188,17 @@ button.in-progress {
     transform: translateX(0);
 }
 
+.lesson-row.locked {
+    opacity: 0.6;
+    pointer-events: none; /* Evita clics en todo el contenedor */
+    filter: grayscale(1);
+}
+
+.lesson-btn.locked {
+    cursor: not-allowed;
+    background-color: #e0e0e0;
+}
+
+.study-button.locked {
+    display: none; /* Opcional: ocultar botón estudiar si está bloqueada */
+}
