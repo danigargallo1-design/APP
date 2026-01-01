@@ -1122,22 +1122,10 @@ const skillData = {
 }
 };
 
-// ===== Cargar progreso desde localStorage =====
-let progreso = {};
-const savedProgress = localStorage.getItem('progreso');
-if (savedProgress) progreso = JSON.parse(savedProgress);
-
-// ===== Función genérica: Crear botón de volver =====
-function createBackButton(onClick) {
-    const btn = document.createElement('button');
-    btn.textContent = "← Volver";
-    btn.classList.add('back-button');
-    btn.onclick = onClick;
-    return btn;
-}
+////////////////////////////////////////////////////////////////////////
 
 
-///////////////////////////////////////////////////////////////////////////////////////////////
+
 // ===== RESET COMPLETO (solo para uso tuyo) =====
 localStorage.removeItem('progreso');
 localStorage.removeItem('profile');
@@ -1160,7 +1148,26 @@ updateProfileCard();
 // Reiniciar todo el progreso
 progreso = {};
 localStorage.setItem('progreso', JSON.stringify(progreso));
-////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+///////////////////////////////////////////////////////////////////////////
+
+// ===== Cargar progreso desde localStorage =====
+let progreso = {};
+const savedProgress = localStorage.getItem('progreso');
+if (savedProgress) progreso = JSON.parse(savedProgress);
+
+// ===== Función genérica: Crear botón de volver =====
+function createBackButton(onClick) {
+    const btn = document.createElement('button');
+    btn.textContent = "← Volver";
+    btn.classList.add('back-button');
+    btn.onclick = onClick;
+    return btn;
+}
+
 
 
 // ===== Mostrar pantalla principal =====
@@ -1663,6 +1670,3 @@ document.head.appendChild(style);
 
 // ===== Inicialización =====
 showHome();
-
-
-
