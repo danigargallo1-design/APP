@@ -1,6 +1,10 @@
-// ===== Variables de estado de la sesión =====
-let currentLessonCorrect = 0;
-let currentLessonErrors = []; // NUEVO: Para guardar las preguntas falladas
+let currentLessonErrors = [];   // Errores de la lección original
+let currentReviewErrors = [];   // Errores cometidos DURANTE el repaso actual
+let originalLesson = null;      // Referencia para repetir la lección completa
+let currentLessonCorrect = 0;   // Contador de aciertos
+let activeLessonSession = null;
+let currentLessonXP = 0; // XP temporal durante la lección
+
 const mainContainer = document.getElementById('main-container');
 
 const skills = [
@@ -1132,6 +1136,12 @@ function createBackButton(onClick) {
     return btn;
 }
 
+/*
+// Reiniciar todo el progreso
+progreso = {};
+localStorage.setItem('progreso', JSON.stringify(progreso));
+*/
+
 // ===== Mostrar pantalla principal =====
 function showHome() {
     activeLessonSession = null;
@@ -1145,6 +1155,7 @@ function showHome() {
 }
 
 // ===== Mostrar habilidad y sus lecciones =====
+// ===== Mostrar habilidad y sus lecciones con Bloqueo Progresivo =====
 function showSkill(skill) {
     if (!skillData[skill]) return showHome();
 
@@ -1155,46 +1166,79 @@ function showSkill(skill) {
     title.textContent = skill;
     mainContainer.appendChild(title);
 
-    skillData[skill].lessons.forEach(lesson => {
+    const lessons = skillData[skill].lessons;
+
+    lessons.forEach((lesson, index) => {
         const lessonRow = document.createElement('div');
         lessonRow.classList.add('lesson-row');
 
-        const lessonBtn = document.createElement('button');
-        lessonBtn.style.flex = '1';
-
         const totalQuestions = lesson.questions?.length || 0;
-        const savedProgress = progreso[skill]?.[lesson.title] || 0;
+        const currentSavedProgress = progreso[skill]?.[lesson.title] || 0;
 
-        // Texto base y estados visuales
-        lessonBtn.textContent = lesson.title;
-        lessonBtn.classList.remove('completed', 'in-progress');
+        // --- LÓGICA DE DESBLOQUEO ---
+        let isUnlocked = true;
 
-        if (totalQuestions > 0) {
-            if (savedProgress >= totalQuestions) {
-                lessonBtn.classList.add('completed');
-                lessonBtn.textContent += " ✓";
-            } else if (savedProgress > 0) {
-                lessonBtn.classList.add('in-progress');
-                lessonBtn.textContent += ` (${savedProgress}/${totalQuestions})`;
-            } else {
-                lessonBtn.textContent += ` (0/${totalQuestions})`;
-            }
+        if (index > 0) {
+            // Verificamos la lección anterior
+            const prevLesson = lessons[index - 1];
+            const prevTotal = prevLesson.questions?.length || 0;
+            const prevProgress = progreso[skill]?.[prevLesson.title] || 0;
+
+            // Si la anterior no está terminada, esta se bloquea
+            isUnlocked = prevProgress >= prevTotal && prevTotal > 0;
         }
 
-        lessonBtn.onclick = () => {
-            let startIndex = savedProgress;
-            if (savedProgress >= totalQuestions) startIndex = 0;
-            if (totalQuestions > 0) showQuestion(skill, lesson, startIndex);
-            else showLesson(skill, lesson);
-        };
+        const lessonBtn = document.createElement('button');
+        lessonBtn.classList.add('lesson-btn');
+        lessonBtn.style.flex = '1';
+
+        // --- RENDERIZADO SEGÚN ESTADO ---
+        if (!isUnlocked) {
+            // ESTADO: BLOQUEADA 🔒
+            lessonBtn.classList.add('locked');
+            lessonBtn.textContent = `🔒 ${lesson.title}`;
+            
+            // Animación Shake al hacer clic
+            lessonBtn.onclick = () => {
+                lessonBtn.classList.remove('shake-animation');
+                void lessonBtn.offsetWidth; // Truco para reiniciar animación
+                lessonBtn.classList.add('shake-animation');
+            };
+        } else {
+            // ESTADO: DESBLOQUEADA
+            if (totalQuestions > 0) {
+                if (currentSavedProgress >= totalQuestions) {
+                    lessonBtn.classList.add('completed');
+                    lessonBtn.textContent = `${lesson.title} ✓`;
+                } else if (currentSavedProgress > 0) {
+                    lessonBtn.classList.add('in-progress');
+                    lessonBtn.textContent = `${lesson.title} (${currentSavedProgress}/${totalQuestions})`;
+                } else {
+                    lessonBtn.textContent = `${lesson.title} (0/${totalQuestions})`;
+                }
+            } else {
+                lessonBtn.textContent = lesson.title;
+            }
+
+            lessonBtn.onclick = () => {
+                let startIndex = currentSavedProgress;
+                if (currentSavedProgress >= totalQuestions) startIndex = 0;
+                
+                if (totalQuestions > 0) showQuestion(skill, lesson, startIndex);
+                else showLesson(skill, lesson);
+            };
+        }
 
         lessonRow.appendChild(lessonBtn);
 
-        const studyBtn = document.createElement('button');
-        studyBtn.textContent = "Estudiar";
-        studyBtn.classList.add('study-button');
-        studyBtn.onclick = () => showLessonStudy(skill, lesson);
-        lessonRow.appendChild(studyBtn);
+        // Botón Estudiar (solo aparece si está desbloqueada)
+        if (isUnlocked) {
+            const studyBtn = document.createElement('button');
+            studyBtn.textContent = "Estudiar";
+            studyBtn.classList.add('study-button');
+            studyBtn.onclick = () => showLessonStudy(skill, lesson);
+            lessonRow.appendChild(studyBtn);
+        }
 
         mainContainer.appendChild(lessonRow);
     });
@@ -1246,21 +1290,21 @@ function showLessonStudy(skill, lesson) {
     mainContainer.appendChild(div);
 }
 
-// ===== Preguntas interactivas =====
 function showQuestion(skill, lesson, questionIndex, isReview = false) {
-    // Si empezamos de cero y NO es un repaso, reseteamos contadores
+    // 1. Si es el inicio de una lección normal, reseteamos contadores y errores
     if (questionIndex === 0 && !isReview) {
         currentLessonCorrect = 0;
-        currentLessonErrors = []; 
+        currentLessonErrors = [];
+        originalLesson = lesson; 
     }
-    
+
     const sessionId = Date.now();
     activeLessonSession = sessionId;
-
     const questionData = lesson.questions[questionIndex];
+
     mainContainer.innerHTML = "";
     
-    // Botón volver modificado para manejar el retorno desde un repaso
+    // Botón volver
     mainContainer.appendChild(createBackButton(() => {
         cleanupQuestion();
         showSkill(skill);
@@ -1278,7 +1322,7 @@ function showQuestion(skill, lesson, questionIndex, isReview = false) {
     explanationDiv.style.fontStyle = 'italic';
     mainContainer.appendChild(explanationDiv);
 
-    const { progressContainer, progressBar, startProgress, completeProgress } = createProgressBar(sessionId, () => goNext());
+    const { progressContainer, startProgress, completeProgress } = createProgressBar(sessionId, () => goNext());
     mainContainer.appendChild(progressContainer);
 
     let questionCompleted = false;
@@ -1287,17 +1331,17 @@ function showQuestion(skill, lesson, questionIndex, isReview = false) {
         questionCompleted = true;
         activeLessonSession = null;
         if (startProgress.stop) startProgress.stop();
-        removeClickListener();
+        document.removeEventListener('click', clickHandler);
     }
 
     function goNext() {
         if (questionCompleted || activeLessonSession !== sessionId) return;
         cleanupQuestion();
+        
         if (questionIndex + 1 < lesson.questions.length) {
             showQuestion(skill, lesson, questionIndex + 1, isReview);
         } else {
-            // Si era un repaso, al terminar volvemos a la pantalla de fin de lección original
-            // o a la habilidad. Aquí lo mandamos al fin de lección.
+            // Al terminar la lista actual, vamos al final
             showLessonEnd(skill, lesson, isReview);
         }
     }
@@ -1310,9 +1354,11 @@ function showQuestion(skill, lesson, questionIndex, isReview = false) {
 
         btn.onclick = (e) => {
             e.stopPropagation();
+            if (questionCompleted) return;
+            
             document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
 
-            // MODIFICADO: Solo guardamos progreso real si NO es un repaso de fallos
+            // Guardar progreso real (solo si no es un repaso)
             if (!isReview) {
                 if (!progreso[skill]) progreso[skill] = {};
                 progreso[skill][lesson.title] = questionIndex + 1;
@@ -1320,24 +1366,27 @@ function showQuestion(skill, lesson, questionIndex, isReview = false) {
             }
 
             if (i === questionData.correct) {
-    btn.classList.add('correct');
-    currentLessonCorrect++;
-} else {
-    btn.classList.add('wrong');
-    // ↓ AÑADE ESTA LÍNEA AQUÍ PARA GUARDAR EL ERROR ↓
-    if (!currentLessonErrors.includes(questionData)) currentLessonErrors.push(questionData);
-    
-    btn.style.animation = 'shake 0.5s';
-    document.querySelectorAll('.option-btn')[questionData.correct].classList.add('correct');
-
+                btn.classList.add('correct');
                 
-                // MODIFICADO: Guardamos la pregunta entera en la lista de fallos
-                // Solo si no la hemos añadido ya en esta sesión
-                if (!currentLessonErrors.includes(questionData)) {
-                    currentLessonErrors.push(questionData);
+                if (!isReview) {
+                    currentLessonCorrect++;
+                    currentLessonXP += 10; // <--- XP por cada acierto
+                } else {
+                    // SI ES REPASO Y ACIERTA: La borramos de la lista de fallos
+                    currentLessonErrors = currentLessonErrors.filter(q => q.question !== questionData.question);
                 }
-
+            } else {
+                btn.classList.add('wrong');
+                btn.style.animation = 'shake 0.5s';
                 document.querySelectorAll('.option-btn')[questionData.correct].classList.add('correct');
+
+                // SI ES LECCIÓN NORMAL Y FALLA: La añadimos a la lista
+                if (!isReview) {
+                    if (!currentLessonErrors.some(q => q.question === questionData.question)) {
+                        currentLessonErrors.push(questionData);
+                    }
+                }
+                // Si falla en repaso, NO hacemos nada (se queda en currentLessonErrors)
             }
 
             explanationDiv.textContent = questionData.explanation;
@@ -1347,57 +1396,14 @@ function showQuestion(skill, lesson, questionIndex, isReview = false) {
 
     function clickHandler() { completeProgress(); }
     document.addEventListener('click', clickHandler);
-    function removeClickListener() { document.removeEventListener('click', clickHandler); }
+    if (i === questionData.correct) {
+    btn.classList.add('correct');
+    if (!isReview) {
+        currentLessonCorrect++;
+        currentLessonXP += 10; // XP temporal por pregunta
+    }
 }
 
-// ===== Fin de lección =====
-function showLessonEnd(skill, lesson, wasReview = false) {
-    mainContainer.innerHTML = "";
-
-    const title = document.createElement('h2');
-    title.textContent = wasReview ? "Repaso Finalizado" : "Lección completada";
-    mainContainer.appendChild(title);
-
-    const total = lesson.questions.length;
-    const summary = document.createElement('p');
-    
-    if (wasReview) {
-        summary.innerHTML = `Has repasado <strong>${total}</strong> fallos.`;
-    } else {
-        summary.innerHTML = `<strong>${lesson.title}</strong><br>Aciertos: ${currentLessonCorrect} / ${total}`;
-    }
-    mainContainer.appendChild(summary);
-
-    const repeatBtn = document.createElement('button');
-    repeatBtn.textContent = "Repetir lección";
-    repeatBtn.onclick = () => showQuestion(skill, lesson, 0);
-    mainContainer.appendChild(repeatBtn);
-
-    // MODIFICADO: Lógica del botón de repasar fallos
-    const reviewErrorsBtn = document.createElement('button');
-    reviewErrorsBtn.textContent = `Repasar fallos (${currentLessonErrors.length})`;
-    
-    if (currentLessonErrors.length > 0) {
-        reviewErrorsBtn.onclick = () => {
-            // Creamos una lección "ficticia" solo con los fallos
-            const reviewLesson = {
-                title: "Repaso de fallos",
-                questions: [...currentLessonErrors]
-            };
-            // Lanzamos showQuestion con el flag de review en true
-            showQuestion(skill, reviewLesson, 0, true);
-        };
-    } else {
-        reviewErrorsBtn.disabled = true;
-        reviewErrorsBtn.style.opacity = "0.5";
-        reviewErrorsBtn.textContent = "Sin fallos que repasar ✨";
-    }
-    mainContainer.appendChild(reviewErrorsBtn);
-
-    const backBtn = document.createElement('button');
-    backBtn.textContent = "Volver a las habilidades";
-    backBtn.onclick = () => showSkill(skill);
-    mainContainer.appendChild(backBtn);
 }
 
 // ===== Crear barra de progreso =====
@@ -1449,71 +1455,189 @@ function createProgressBar(sessionId, onComplete) {
     return { progressContainer, progressBar, startProgress, completeProgress, stop: () => cancelAnimationFrame(animationFrameId) };
 }
 
-// ===== Fin de lección =====
+// ===== UN SOLO BLOQUE DEFINITIVO: Fin de lección =====
 function showLessonEnd(skill, lesson, wasReview = false) {
+    activeLessonSession = null; // Detenemos cualquier barra de progreso activa
     mainContainer.innerHTML = "";
 
     const title = document.createElement('h2');
-    title.textContent = wasReview ? "Repaso Finalizado" : "Lección completada";
+    title.textContent = wasReview ? "Repaso de Fallos" : "Lección Completada";
     mainContainer.appendChild(title);
 
-    const total = lesson.questions.length;
+    // La clave es mirar SIEMPRE currentLessonErrors, que es nuestra lista maestra
+    let fallosRestantes = currentLessonErrors.length;
     const summary = document.createElement('p');
-    
+
     if (wasReview) {
-        summary.innerHTML = `Has repasado <strong>${total}</strong> fallos.`;
+        summary.innerHTML = fallosRestantes === 0 
+            ? "¡Excelente! Has corregido todos los errores. 🎉" 
+            : `Te quedan <strong>${fallosRestantes}</strong> fallos por resolver.`;
     } else {
-        summary.innerHTML = `<strong>${lesson.title}</strong><br>Aciertos: ${currentLessonCorrect} / ${total}`;
+        summary.innerHTML = `Has terminado <strong>${lesson.title}</strong>.<br>Aciertos: ${currentLessonCorrect} / ${lesson.questions.length}`;
     }
     mainContainer.appendChild(summary);
 
-    // Botón Repetir Todo
+    // --- BOTÓN 1: REPASAR FALLOS (Solo si hay fallos) ---
+    if (fallosRestantes > 0) {
+        const reviewBtn = document.createElement('button');
+        reviewBtn.textContent = `Repasar fallos (${fallosRestantes})`;
+        reviewBtn.style.backgroundColor = "#ff9800"; // Color naranja para resaltar
+        reviewBtn.onclick = () => {
+            // Creamos una lección ficticia con lo que queda en la lista de errores
+            const reviewLesson = {
+                title: "Repaso de fallos",
+                questions: [...currentLessonErrors] 
+            };
+            // Lanzamos el repaso (isReview = true)
+            showQuestion(skill, reviewLesson, 0, true);
+        };
+        mainContainer.appendChild(reviewBtn);
+    }
+
+    // --- BOTÓN 2: REPETIR LECCIÓN COMPLETA ---
     const repeatBtn = document.createElement('button');
-    repeatBtn.textContent = "Repetir lección";
+    repeatBtn.textContent = "Repetir lección completa";
     repeatBtn.onclick = () => {
-        currentLessonErrors = []; // Limpiamos fallos para empezar de cero
-        showQuestion(skill, lesson, 0);
+        // Al repetir todo, reseteamos la lista de errores
+        currentLessonErrors = []; 
+        showQuestion(skill, originalLesson, 0, false);
     };
     mainContainer.appendChild(repeatBtn);
 
-    // Botón Repasar Fallos (EL QUE DABA EL ALERT)
-    const reviewErrorsBtn = document.createElement('button');
-    reviewErrorsBtn.textContent = `Repasar fallos (${currentLessonErrors.length})`;
-    
-    if (currentLessonErrors.length > 0) {
-        reviewErrorsBtn.onclick = () => {
-            // Creamos una mini-lección solo con lo que fallaste
-            const reviewLesson = {
-                title: "Repaso de fallos",
-                questions: [...currentLessonErrors]
-            };
-            showQuestion(skill, reviewLesson, 0, true); // true para modo repaso
-        };
-    } else {
-        reviewErrorsBtn.disabled = true;
-        reviewErrorsBtn.style.opacity = "0.5";
-        reviewErrorsBtn.textContent = "¡Sin fallos! ✨";
-    }
-    mainContainer.appendChild(reviewErrorsBtn);
-
-    // Botón Volver
+    // --- BOTÓN 3: VOLVER ---
     const backBtn = document.createElement('button');
-    backBtn.textContent = "Volver a las habilidades";
+    backBtn.textContent = "Volver a Habilidades";
+    backBtn.classList.add('back-button');
     backBtn.onclick = () => showSkill(skill);
     mainContainer.appendChild(backBtn);
+    if (!wasReview) {
+    addXP(currentLessonXP);
+    currentLessonXP = 0;
 }
 
-// ===== Animación shake =====
+}
+
+
+function createProfileCard() {
+    let card = document.getElementById('profile-card');
+
+    if (!card) {
+        card = document.createElement('div');
+        card.id = 'profile-card';
+        card.style.cssText = `
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            width: 160px;
+            padding: 10px;
+            background-color: #ffffffcc; /* ligeramente transparente */
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            font-family: sans-serif;
+            font-size: 0.85rem;
+            z-index: 1000;
+        `;
+        document.body.appendChild(card);
+    }
+
+    card.innerHTML = `
+        <div style="font-weight:bold;">${profile.name}</div>
+        <div style="margin:4px 0;">Nivel ${profile.level}</div>
+        <div style="width:100%; height:10px; background:#ddd; border-radius:5px; overflow:hidden;">
+            <div id="xp-fill" style="width:${profile.xp % 100}%; height:100%; background:#4caf50; transition:width 0.5s;"></div>
+        </div>
+        <div style="text-align:right; font-size:0.7rem; margin-top:2px;">XP: ${profile.xp}</div>
+    `;
+}
+// ===== Inicialización del perfil =====
+let profile = {
+    name: null,
+    xp: 0,
+    level: 1
+};
+
+const savedProfile = localStorage.getItem('profile');
+if (savedProfile) {
+    profile = JSON.parse(savedProfile);
+} else {
+    askForProfile();
+}
+
+function saveProfile() {
+    localStorage.setItem('profile', JSON.stringify(profile));
+}
+
+// Preguntar por nombre si no hay perfil
+function askForProfile() {
+    let name = prompt("¡Bienvenido! Ingresa tu nombre:");
+    if (!name || name.trim() === "") name = "Estudiante";
+    profile.name = name;
+    profile.xp = 0;
+    profile.level = 1;
+    saveProfile();
+    createProfileCard();
+}
+
+// Renderizar tarjeta de perfil (actualizar XP y nivel)
+function updateProfileCard() {
+    const fill = document.getElementById('xp-fill');
+    if (fill) fill.style.width = `${profile.xp % 100}%`;
+    const card = document.getElementById('profile-card');
+    if (card) {
+        card.querySelector('div:nth-child(2)').textContent = `Nivel ${profile.level}`;
+        card.querySelector('div:nth-child(4)').textContent = `XP: ${profile.xp}`;
+    }
+}
+
+// Crear tarjeta al inicio
+createProfileCard();
+function addXP(amount) {
+    profile.xp += amount;
+
+    // Subida de nivel automática cada 100 XP
+    const newLevel = Math.floor(profile.xp / 100) + 1;
+    if (newLevel > profile.level) {
+        profile.level = newLevel;
+        alert(`¡Has subido al nivel ${newLevel}! `);
+    }
+
+    saveProfile();
+    updateProfileCard();
+}
+
+// ===== Animación shake y responsive del perfil =====
 const style = document.createElement('style');
 style.textContent = `
 @keyframes shake {
     0% { transform: translateX(0); }
-    20% { transform: translateX(-5px); }
-    40% { transform: translateX(5px); }
-    60% { transform: translateX(-5px); }
-    80% { transform: translateX(5px); }
+    25% { transform: translateX(-5px); }
+    50% { transform: translateX(5px); }
+    75% { transform: translateX(-5px); }
     100% { transform: translateX(0); }
-}`;
+}
+
+.shake-animation {
+    animation: shake 0.4s ease;
+}
+
+/* ===== Ajustes responsive mini-card perfil ===== */
+@media (max-width: 600px) {
+    #profile-card {
+        width: 120px !important;
+        padding: 6px !important;
+        font-size: 0.75rem !important;
+        top: 8px !important;
+        left: 8px !important;
+    }
+    #profile-card div:nth-child(2) { font-size: 0.7rem !important; } /* nivel */
+    #profile-card div:nth-child(4) { font-size: 0.6rem !important; } /* XP */
+}
+
+@media (max-width: 400px) {
+    #profile-card div:nth-child(3) { display: none !important; } /* ocultar barra XP */
+}
+`;
+
 document.head.appendChild(style);
 
 // ===== Inicialización =====
